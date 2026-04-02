@@ -1,0 +1,6 @@
+# Replace hostname and upstream (service name + internal port from compose).
+
+app.example.com {
+	encode gzip zstd
+	reverse_proxy webapp:8000
+}

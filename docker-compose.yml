@@ -1,0 +1,45 @@
+# Example edge stack — copy to ~/deploy and edit paths / service names.
+# From this directory: docker compose up -d --build
+
+name: edge
+
+services:
+  # Rename and point context at your clone under ~/services/<name>/
+  webapp:
+    build:
+      context: ../services/webapp
+      dockerfile: Dockerfile
+    image: webapp:local
+    env_file:
+      - ../services/webapp/.env
+    environment:
+      BUILD_VERSION: ${BUILD_VERSION:-local}
+    volumes:
+      - webapp_data:/app/data
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - webapp
+    restart: unless-stopped
+
+volumes:
+  webapp_data:
+  caddy_data:
+  caddy_config:
