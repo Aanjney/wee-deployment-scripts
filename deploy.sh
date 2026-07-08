@@ -13,6 +13,8 @@
 # Optional:
 #   DEPLOY_COMPOSE_FILE, COMPOSE_PROJECT_NAME / STACK_NAME, DEPLOY_SKIP_ENV_CHECK=1
 #   DEPLOY_STABILIZE_SECONDS  (default 25, used with SKIP)
+#   DEPLOY_STOP_FIRST=1      — no two-replica roll; recreate one container (needed if the app
+#                              uses exclusive file locks on shared volumes, e.g. SQLite)
 set -euo pipefail
 
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -89,7 +91,7 @@ _wait_new_replica() {
     sleep 5
   done
   if [[ "${ok}" != true ]]; then
-    echo "error: health check failed; leaving 2 replicas for inspection" >&2
+    echo "error: health check failed (inspect: docker compose ps ${SERVICE})" >&2
     return 1
   fi
   return 0
@@ -108,6 +110,25 @@ if [[ ${#OLD_IDS[@]} -eq 0 ]]; then
   fi
   _reload_caddy
   echo "$(date --utc +%FT%TZ): done."
+  exit 0
+fi
+
+# Rolling 2→1 needs two containers to share volumes read-only or with cluster-safe storage.
+# Apps with exclusive file locks on shared volumes (SQLite, etc.) — second replica never healthy.
+if [[ "${DEPLOY_STOP_FIRST:-0}" == "1" ]]; then
+  echo "$(date --utc +%FT%TZ): stop-first deploy (${SERVICE}) — DEPLOY_STOP_FIRST=1 (single replica, brief downtime)..."
+  BUILD_VERSION="${BUILD_VERSION}" "${COMPOSE[@]}" up -d --no-deps --force-recreate --scale "${SERVICE}=1" "${SERVICE}"
+  mapfile -t NEW_IDS < <("${COMPOSE[@]}" ps -q "${SERVICE}" 2>/dev/null || true)
+  if [[ ${#NEW_IDS[@]} -eq 0 ]]; then
+    echo "error: no container id after stop-first up" >&2
+    exit 1
+  fi
+  NEW_ID="${NEW_IDS[0]}"
+  if ! _wait_new_replica "${NEW_ID}"; then
+    exit 1
+  fi
+  _reload_caddy
+  echo "$(date --utc +%FT%TZ): deploy complete (${SERVICE})."
   exit 0
 fi
 
