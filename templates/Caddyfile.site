@@ -1,0 +1,4 @@
+myapp.example.com {
+	encode gzip zstd
+	reverse_proxy myapp:8080
+}

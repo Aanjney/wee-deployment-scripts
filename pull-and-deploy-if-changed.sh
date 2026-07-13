@@ -19,6 +19,5 @@ if [[ "$(git -C "${DEPLOY_REPO}" rev-parse HEAD)" == "$(git -C "${DEPLOY_REPO}" 
   exit 0
 fi
 
-echo "$(date --utc +%FT%TZ): ${DEPLOY_SERVICE}: ${REMOTE_REF} advanced; fast-forwarding..."
-git -C "${DEPLOY_REPO}" merge --ff-only "${REMOTE_REF}"
+echo "$(date --utc +%FT%TZ): ${DEPLOY_SERVICE}: ${REMOTE_REF} advanced; deploying..."
 exec "${DEPLOY_DIR}/deploy.sh"

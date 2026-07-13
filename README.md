@@ -1,71 +1,96 @@
-## Edge stack (generic)
+# wee-deployment-scripts
 
-Compose + Caddy + scripts for one VPS. Adjust names, paths, and ports for each project.
+Single-machine deployment with Docker Compose + Caddy.
 
-### 1. Layout on the VPS
+## Layout
 
 ```text
-~/deploy/
+~/wee-deployment-scripts/
   docker-compose.yml
   Caddyfile
   deploy.sh
-  pull-and-deploy-if-changed.sh
   run-with-lock.sh
-  env.template          # checklist (comments only)
+  pull-and-deploy-if-changed.sh
+  env.template
+  templates/
+    docker-compose.service.yml
+    Caddyfile.site
+
 ~/services/<app>/
-  Dockerfile
-  .env                  # if compose uses env_file
-  …
+  .env
+  data/
+  Dockerfile            # internal apps only
 ```
 
-### 2. Host prerequisites
+**Dependencies:** Docker, compose plugin, git, ports 80/443 open, DNS pointing at this host.
 
-- Docker Engine + Compose plugin  
-- `git` (for automated pulls)  
-- Firewall: **80** and **443**  
-- DNS for each public hostname → this server  
-- Deploy keys / tokens for private Git remotes (if needed)  
-
-Details and variable names: **`env.template`**.
-
-### 3. Compose and Caddy
-
-1. Edit **`docker-compose.yml`**: service name(s), `build.context` → `../services/<app>`, `expose` port, `healthcheck` if you use Compose health.  
-2. Edit **`Caddyfile`**: site address and `reverse_proxy <service>:<port>`.  
-3. First boot: `cd ~/deploy && docker compose up -d --build`
-
-### 4. Deploy one service by hand
+## Deploy / update everything
 
 ```bash
-export DEPLOY_SERVICE=webapp
-export DEPLOY_REPO=/home/you/services/webapp
-export DEPLOY_HEALTH_URL=http://127.0.0.1:8000/ready   # or SKIP — see §6
-~/deploy/deploy.sh
+cd ~/wee-deployment-scripts
+docker compose up -d
 ```
 
-### 5. Cron (per app)
+## Type 1 — Third-party Docker image
 
-Use a **different** `DEPLOY_LOCK` / `DEPLOY_LOG_FILE` per service so jobs don’t block each other.
+Currently hosted: Linkwarden, Memos, Vaultwarden, Beszel.
 
-```cron
-* * * * * DEPLOY_SERVICE=webapi DEPLOY_REPO=/home/you/services/webapi DEPLOY_HEALTH_URL=http://127.0.0.1:8080/health DEPLOY_LOCK=/var/lock/deploy-webapi.lock DEPLOY_LOG_FILE=/var/log/deploy-webapi.log /home/you/deploy/run-with-lock.sh
+1. `mkdir -p ~/services/<app>/data` and create `~/services/<app>/.env`
+2. Copy the `myservice` block from `templates/docker-compose.service.yml` into `docker-compose.yml`. Rename placeholders. Add to `caddy.depends_on`.
+3. Copy `templates/Caddyfile.site` into `Caddyfile`. Set domain and port.
+4. Start:
+
+```bash
+docker compose up -d <app>
+docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
 ```
 
-Only the repo that changed is fetched/merged; only that service is rebuilt and rolled.
+Update: `docker compose pull <app> && docker compose up -d <app>`
 
-### 6. Health URL — required?
+** Beszel agent uses `network_mode: host` 
 
-**For this rolling script:** you need **some** signal that the **new** container is safe before removing the old one.
+## Type 2 — Internal app (build from source)
 
-| Situation | What to use |
-|-----------|----------------|
-| HTTP API with a probe | `DEPLOY_HEALTH_URL=http://127.0.0.1:<port>/<path>` |
-| Nginx (or similar) serving static **from a container** | Same: e.g. `http://127.0.0.1:80/` (200 OK on `/`) |
-| No good HTTP target | `DEPLOY_HEALTH_URL=SKIP` and tune `DEPLOY_STABILIZE_SECONDS` (fixed sleep; less safe) |
-| **Pure static files** only in Caddy (`root` + `file_server`, **no** backend container) | **Don’t** use this rolling flow for that site. Update files on disk (rsync/git pull on host) and `caddy reload`. No replica swap. |
+Example: `pysparkassist`.
 
-So: a dedicated health **path** is not mandatory; a **200 from `/`** is enough. True “static-only in Caddy” doesn’t need this script.
+1. Clone to `~/services/<app>`, copy and edit `.env`
+2. Copy the `myapp` block from `templates/docker-compose.service.yml` into `docker-compose.yml`. Add sidecars and `depends_on` if needed. Add to `caddy.depends_on`.
+3. Copy `templates/Caddyfile.site` into `Caddyfile`. Set domain and port.
+4. Start:
 
-### 7. `image:` only (no `build:`)
+```bash
+docker compose up -d --build <app>
+docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
+```
 
-`docker compose build <service>` may do nothing. Pull new images yourself (e.g. `docker compose pull <service>`) or extend the scripts.
+Deploy: `DEPLOY_SERVICE=<app> DEPLOY_REPO=~/services/<app> ~/wee-deployment-scripts/deploy.sh`
+
+Auto-deploy via cron — see `env.template`.
+
+## Environment variables
+
+
+| Where                   | What                                                               |
+| ----------------------- | ------------------------------------------------------------------ |
+| `~/services/<app>/.env` | App secrets and config                                             |
+| Compose `environment:`  | Docker-network wiring only (e.g. `QDRANT_URL: http://qdrant:6333`) |
+| Cron env                | `DEPLOY_*` vars for auto-deploy                                    |
+
+
+## Caddy reload
+
+After editing `Caddyfile`:
+
+```bash
+docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
+```
+
+## Backups
+
+Bind-mounted data lives in `~/services/<app>/data/`. Back up those directories.
+
+## Rollback
+
+Type 1: re-pull a pinned tag or previous image digest.
+
+Type 2: `git checkout <sha>` in the service repo, then run `deploy.sh`.

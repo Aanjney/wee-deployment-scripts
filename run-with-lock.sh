@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Cron wrapper: export DEPLOY_* then run pull-and-deploy-if-changed (serialized per lock file).
+# Cron wrapper: flock + log, then pull-and-deploy-if-changed.
 set -euo pipefail
 
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ -z "${DEPLOY_SERVICE:-}" || -z "${DEPLOY_REPO:-}" ]]; then
-  echo "error: set DEPLOY_SERVICE and DEPLOY_REPO (e.g. in crontab)" >&2
+  echo "error: set DEPLOY_SERVICE and DEPLOY_REPO" >&2
   exit 1
 fi
 
@@ -19,16 +19,7 @@ fi
 
 {
   echo "=== $(date --utc +%FT%TZ) ${DEPLOY_SERVICE} start ==="
-  export DEPLOY_SERVICE
-  export DEPLOY_REPO
-  export DEPLOY_HEALTH_URL="${DEPLOY_HEALTH_URL:-}"
-  export DEPLOY_STABILIZE_SECONDS="${DEPLOY_STABILIZE_SECONDS:-}"
-  export DEPLOY_COMPOSE_FILE="${DEPLOY_COMPOSE_FILE:-}"
-  export DEPLOY_SKIP_ENV_CHECK="${DEPLOY_SKIP_ENV_CHECK:-}"
-  export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-}"
-  export STACK_NAME="${STACK_NAME:-}"
-  export DEPLOY_REMOTE="${DEPLOY_REMOTE:-}"
-  export DEPLOY_BRANCH="${DEPLOY_BRANCH:-}"
+  export DEPLOY_SERVICE DEPLOY_REPO
   "${DEPLOY_DIR}/pull-and-deploy-if-changed.sh"
   echo "=== $(date --utc +%FT%TZ) ${DEPLOY_SERVICE} end ==="
 } >>"${LOG}" 2>&1
