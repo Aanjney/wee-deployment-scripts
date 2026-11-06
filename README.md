@@ -45,7 +45,7 @@ docker compose up -d <app>
 docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
 ```
 
-Update: `docker compose pull <app> && docker compose up -d <app>`
+Update: images are pinned to exact versions, and Diun posts to ntfy when a newer tag exists. Bump the tag in `docker-compose.yml`, check the release notes for required intermediate versions, then `docker compose pull <app> && docker compose up -d <app>`.
 
 ** Beszel agent uses `network_mode: host` 
 
