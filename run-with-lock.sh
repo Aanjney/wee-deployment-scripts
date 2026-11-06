@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cron wrapper: flock + log, then pull-and-deploy-if-changed.
+# Cron wrapper: flock, then pull-and-deploy-if-changed. Logs only deploys and errors.
 set -euo pipefail
 
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,9 +17,5 @@ if ! flock -n 9; then
   exit 0
 fi
 
-{
-  echo "=== $(date --utc +%FT%TZ) ${DEPLOY_SERVICE} start ==="
-  export DEPLOY_SERVICE DEPLOY_REPO
-  "${DEPLOY_DIR}/pull-and-deploy-if-changed.sh"
-  echo "=== $(date --utc +%FT%TZ) ${DEPLOY_SERVICE} end ==="
-} >>"${LOG}" 2>&1
+export DEPLOY_SERVICE DEPLOY_REPO
+"${DEPLOY_DIR}/pull-and-deploy-if-changed.sh" >>"${LOG}" 2>&1

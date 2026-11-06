@@ -13,7 +13,7 @@ REMOTE="${DEPLOY_REMOTE:-origin}"
 BRANCH="${DEPLOY_BRANCH:-main}"
 REMOTE_REF="${REMOTE}/${BRANCH}"
 
-git -C "${DEPLOY_REPO}" fetch "${REMOTE}" "${BRANCH}"
+git -C "${DEPLOY_REPO}" fetch -q "${REMOTE}" "${BRANCH}"
 
 if [[ "$(git -C "${DEPLOY_REPO}" rev-parse HEAD)" == "$(git -C "${DEPLOY_REPO}" rev-parse "${REMOTE_REF}")" ]]; then
   exit 0
